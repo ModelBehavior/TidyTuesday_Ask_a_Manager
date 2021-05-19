@@ -1,0 +1,169 @@
+---
+title: "Tidy Tuesday Ask a Manager"
+author: Ra'Shawn
+output: html_notebook
+---
+# Project 3: Ask a Manager
+## Analysis of Manager salaries
+# Questions
++ Is there a significant difference bewteen salary by gender?
++ Is there a sig diff between salary by race?
++ Do Mangers on average get paid more with more education?
++ Do older mangers get paid more on average?
++ Do mangers with more years of experiance get paid more on average?
+
+# Data
+The data this week comes from the Ask a Manager Survey. H/t to Kaija Gahm for sharing it as an issue!
+The salary survey a few weeks ago got a huge response — 24,000+ people shared their salaries and other info, which is a lot of raw data to sift through. Reader Elisabeth Engl kindly took the raw data and analyzed some of the trends in it and here’s what she found. (She asked me to note that she did this as a fun project to share some insights from the survey, rather than as a paid engagement.)
+This data does not reflect the general population; it reflects Ask a Manager readers who self-selected to respond, which is a very different group (as you can see just from the demographic breakdown below, which is very white and very female).
+Elisabeth Engl prepped some plots for the Ask a Manager blog using this data.
+The survey itself is available here. \ 
+[Link to data and extra information](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-18/readme.md)
+
+# Methodology
+Using R ggplot, I will explore this weeks tidytuesday data set to answer questions about manager salaries.
+
+# Results
+see pictures below
+
+# Limitations and Next steps
+The presentation of the data can be made better using shiny or a BI tool such as Power BI or IBM Cognos for interactivity, and further exploration. Significance can be further tested through statistical tests such as ANOVA or t-tests, to confirm graphical findings.
+
+```{r libraries, include=FALSE,echo=FALSE}
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = FALSE, include = FALSE)
+```
+
+```{r load-data}
+tuesdata <- tidytuesdayR::tt_load('2021-05-18')
+survey <- tuesdata$survey
+
+head(survey)
+
+survey %>% 
+  summarise_all(~mean(is.na(.))) # proportion of missing data
+
+survey %>% 
+  select(-c(additional_context_on_job_title,currency_other,additional_context_on_income)) %>% 
+  mutate(how_old_are_you = factor(how_old_are_you),
+         industry = factor(industry),
+         job_title = factor(job_title),
+         currency = factor(currency),
+         overall_years_of_professional_experience = factor(overall_years_of_professional_experience),
+         years_of_experience_in_field = factor(years_of_experience_in_field),
+         highest_level_of_education_completed = factor(highest_level_of_education_completed),
+         other_monetary_comp = as.numeric(other_monetary_comp),
+         timestamp = lubridate::mdy_hms(timestamp)) -> survey
+```
+
+```{r fig-salary-by-highest-level-of-education}
+p3<-survey %>% 
+  na.omit() %>% 
+  group_by(highest_level_of_education_completed) %>% 
+  summarise(avg_annual_salary = mean(annual_salary)) %>% 
+  ggplot(aes(fct_reorder(highest_level_of_education_completed,avg_annual_salary ),avg_annual_salary)) +
+  geom_point(color="darkred") +
+  coord_flip() +
+  scale_y_continuous(labels=scales::dollar_format()) +
+  labs( x="",
+        y = " Average Annual Salary",
+        title = "Average Annual Salary by \n Highest Level of Education") +
+  ggthemes::theme_hc()
+```
+
+```{r fig-salary-by-gender}
+survey %>% 
+  mutate(gender = ifelse(gender=="Prefer not to answer","Other or prefer not to answer",gender)) %>% 
+  group_by(gender) %>% 
+  summarise(avg_anual_salary = mean(annual_salary),
+            n = n()) %>% 
+  na.omit() %>% 
+  ggplot(aes(reorder(gender,avg_anual_salary),avg_anual_salary)) +
+  geom_col(fill = "lightblue") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(x ="",
+       y = "Average Annual Salary",
+       title = "Average Annual Salary by Gender") +
+  ggthemes::theme_hc()
+```
+
+
+```{r top-30-job-by-salary}
+survey %>% 
+  group_by(job_title) %>% 
+  summarise(avg_salary = mean(annual_salary),
+            n = n()) %>% 
+  arrange(desc(avg_salary))
+
+survey %>% 
+  group_by(job_title) %>% 
+  summarise(avg_salary = median(annual_salary),
+            n = n()) %>% 
+  filter( n >= 30) %>% 
+  arrange(desc(avg_salary)) %>% 
+  head(30) %>% 
+  ggplot(aes(reorder(job_title,avg_salary),avg_salary)) +
+  geom_point(color="darkred") +
+  coord_flip() +
+  labs(x ="",
+       y = "Median Annual Salary",
+       title = "Median Annual Salary by Job Tittle",
+       caption = "This plot excludes groups with n < 30 memebers") +
+  ggthemes::theme_hc() +
+  scale_y_continuous(labels = scales::dollar_format())
+```
+
+```{r fig-salary-by-age}
+p2 <- survey %>% 
+  mutate(how_old_are_you = factor(how_old_are_you,levels = c("under 18",
+                                                             "18-24",
+                                                             "25-34",
+                                                             "35-44",
+                                                             "45-54",
+                                                             "55-64",
+                                                             "65 or over"))) %>% 
+  group_by(how_old_are_you) %>% 
+  summarise(avg_salary = median(annual_salary),
+            n=n()) %>% 
+  ggplot(aes(how_old_are_you,avg_salary)) +
+  geom_col(fill="lightblue") + 
+  coord_flip() +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  ggthemes::theme_hc() +
+  labs(x = "",
+       y = "Median Annual Salary",
+       title = "Median Annual Salary by Age Range") # Looks like you lose money at age range 55-64, but make more at range 65 or over
+```
+
+```{r}
+#install.packages("usmap")
+library(usmap)
+
+survey %>% 
+  subset(state %in% state.name) %>% 
+  mutate(state = usdata::state2abbr(state)) %>% 
+  group_by(state) %>% 
+  summarise(med_sal = median(annual_salary)) -> states_df
+
+p1 <- plot_usmap(data=as.data.frame(states_df), 
+           regions = "states",
+           values ="med_sal",
+           color="red") +
+  scale_fill_continuous(low = "purple", high = "yellow", name="Median Salary",labels = scales::dollar_format()) + 
+  theme(legend.position = "right") + 
+  labs(title = "Median Salary by State")
+```
+
+```{r fig.width=5}
+p5 <- ggpubr::ggarrange(
+  p1, # First row with line plot
+      # Second row with box and dot plots
+  ggpubr::ggarrange(p2, p3, ncol = 2, labels = c("B", "C")), 
+  nrow = 2, 
+  labels = "A"       # Label of the map
+  ) 
+p5
+```
+
